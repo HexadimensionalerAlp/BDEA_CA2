@@ -102,3 +102,9 @@ dist
 
 # TernJS port file
 .tern-port
+
+# db
+data/cassandra/
+data/neo4j/*/logs/
+data/neo4j/*/data/
+data/neo4j/*/plugins/

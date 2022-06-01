@@ -1,0 +1,87 @@
+version: '3.9'
+networks:
+  cassandra:
+    driver: bridge
+  neo4j:
+    driver: bridge
+services:
+  cassandra_1:
+    image: cassandra:latest
+    container_name: cass_1
+    hostname: cass_1
+    networks:
+      - cassandra
+    ports:
+      - 9042:9042
+    volumes:
+      - ./data/cassandra/cass_1:/var/lib/cassandra
+    environment:
+      - CASSANDRA_SEEDS=cass_1,cass_2
+      - CASSANDRA_CLUSTER_NAME=cass-cluster
+      - CASSANDRA_PASSWORD_SEEDER=yes
+      - CASSANDRA_PASSWORD=cassandra
+  cassandra_2:
+    image: cassandra:latest
+    container_name: cass_2
+    hostname: cass_2
+    networks:
+      - cassandra
+    ports:
+      - 9043:9042
+    volumes:
+      - ./data/cassandra/cass_2:/var/lib/cassandra
+    environment:
+      - CASSANDRA_SEEDS=cass_1,cass_2
+      - CASSANDRA_CLUSTER_NAME=cass-cluster
+      - CASSANDRA_PASSWORD=cassandra
+  neo4j_1:
+    image: neo4j:latest
+    container_name: neo4j_1
+    hostname: neo4j_1
+    networks:
+      - neo4j
+    ports:
+      - 7474:7474
+      - 6477:6477
+      - 7687:7687
+    volumes:
+      - ./data/neo4j/neo4j_1/conf:/conf
+      - ./data/neo4j/neo4j_1/data:/data
+      - ./data/neo4j/neo4j_1/logs:/logs
+      - ./data/neo4j/neo4j_1/plugins:/plugins
+    environment:
+      - NEO4J_AUTH=neo4j/neo4j12345
+      - NEO4J_dbms_mode=CORE
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=2
+      - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=2
+      - NEO4J_causal__clustering_initial__discovery__members=neo4j_1:5000,neo4j_2:5001
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+      - NEO4J_dbms_connector_http_listen__address=:7474
+      - NEO4J_dbms_connector_https_listen__address=:6477
+      - NEO4J_dbms_connector_bolt_listen__address=:7687
+  # clusters are only available with the premium version
+  # neo4j_2:
+  #   image: neo4j:latest
+  #   container_name: neo4j_2
+  #   hostname: neo4j_2
+  #   networks:
+  #     - neo4j
+  #   ports:
+  #     - 7475:7474
+  #     - 6478:6477
+  #     - 7688:7687
+  #   volumes:
+  #     - ./data/neo4j/neo4j_2/conf:/conf
+  #     - ./data/neo4j/neo4j_2/data:/data
+  #     - ./data/neo4j/neo4j_2/logs:/logs
+  #     - ./data/neo4j/neo4j_2/plugins:/plugins
+  #   environment:
+  #     - NEO4J_AUTH=neo4j/neo4j12345
+  #     - NEO4J_dbms_mode=CORE
+  #     - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=2
+  #     - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=2
+  #     - NEO4J_causal__clustering_initial__discovery__members=neo4j_1:5000,neo4j_2:5001
+  #     - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+  #     - NEO4J_dbms_connector_http_listen__address=:7475
+  #     - NEO4J_dbms_connector_https_listen__address=:6478
+  #     - NEO4J_dbms_connector_bolt_listen__address=:7688

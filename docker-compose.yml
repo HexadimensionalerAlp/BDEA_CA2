@@ -6,7 +6,7 @@ networks:
     driver: bridge
 services:
   cassandra_1:
-    image: cassandra:latest
+    build: .
     container_name: cass_1
     hostname: cass_1
     networks:
@@ -21,7 +21,7 @@ services:
       - CASSANDRA_PASSWORD_SEEDER=yes
       - CASSANDRA_PASSWORD=cassandra
   cassandra_2:
-    image: cassandra:latest
+    build: .
     container_name: cass_2
     hostname: cass_2
     networks:

@@ -37,12 +37,12 @@ app.post('/top25PostsContainingWords/', async (req: Request, res: Response) => {
     res.send(`TBD: should list top 25 Posts containing a list of words`);
 });
 
-app.get('/test/', async (_req: Request, res: Response) => {
-    res.send(await dbAccess.getTestTableResults());
+app.get('/generateData/', async (_req: Request, res: Response) => {
+    res.send(await dbPopulate.generateData());
 });
 
-app.get('/populateDBs/', async (_req: Request, res: Response) => {
-    dbPopulate.loadAllDataIntoDBs();
+app.get('/writeDataToDBs/', async (_req: Request, res: Response) => {
+    await dbPopulate.writeToDBs();
     res.send('probably done');
 });
 

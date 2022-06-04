@@ -20,6 +20,8 @@ services:
       - CASSANDRA_CLUSTER_NAME=cass-cluster
       - CASSANDRA_PASSWORD_SEEDER=yes
       - CASSANDRA_PASSWORD=cassandra
+      - HEAP_NEWSIZE=128M
+      - MAX_HEAP_SIZE=2048M
   cassandra_2:
     build: .
     container_name: cass_2
@@ -34,6 +36,8 @@ services:
       - CASSANDRA_SEEDS=cass_1,cass_2
       - CASSANDRA_CLUSTER_NAME=cass-cluster
       - CASSANDRA_PASSWORD=cassandra
+      - HEAP_NEWSIZE=128M
+      - MAX_HEAP_SIZE=2048M
   neo4j_1:
     image: neo4j:latest
     container_name: neo4j_1

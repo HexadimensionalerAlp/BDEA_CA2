@@ -6,7 +6,7 @@ import fs from 'fs';
 import { randomInt } from 'crypto';
 import fetch from 'node-fetch';
 import { parse } from 'csv-parse';
-import { exec, execFile } from 'child_process';
+import { exec } from 'child_process';
 
 const FOLLOWS_PATH = 'data/test-data/twitter_combined.txt'
 const FOLLOWS_PROCESSED_PATH = 'data/test-data/follows.csv';
@@ -49,12 +49,16 @@ const neo4jClient = neo4j.driver(process.env.NEO4J_IP!, neo4j.auth.basic(
     process.env.NEO4J_USER!,
     process.env.NEO4J_PASS!)).session();
 
+// wird vom Endpunkt localhost/generateData aufgerufen
 export const generateData = async (): Promise<string> => {
   const [mostFollowedUsers, allUsers] = await generateFollowsAndUsers();
   await generatePostsAndLikes(mostFollowedUsers, allUsers);
   return 'done';
 }
 
+// generiert die Dateien users.csv und follows.csv nur neu, wenn sie noch nicht vorhanden sind, da dies länger dauert
+// und jeder Durchgang den gleichen Inhalt generiert.
+// gibt eine Liste mit den Hundert Usern mit den meisten Followern und eine Liste aller User zurück.
 const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
   const lines = new nReadlines(FOLLOWS_PATH);
   const users = new Map<string, number>();
@@ -65,6 +69,7 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
   const usersExist = fs.existsSync(USERS_PROCESSED_PATH);
 
   try {
+    // schreibt die header
     if (!followsExist) {
       fs.appendFileSync(FOLLOWS_PROCESSED_PATH, 'userid,followid\n');
     }
@@ -72,6 +77,8 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
       fs.appendFileSync(USERS_PROCESSED_PATH, 'id,name\n');
     }
 
+    // liest die follows.txt Zeile für Zeile, wandelt den Inhalt in eine CSV-Zeile um und schreibt diese in die follows.csv
+    // schreibt alle User in eine Map und zählt ihre Follower
     while (line = lines.next()) {
       const [user, follow] = line.toString().split(' ');
       const followerCount = users.get(follow);
@@ -89,6 +96,7 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
 
     console.log('***************** finished follows *****************');
     
+    // holt eine Liste mit Vornamen aus dem Internet und speichert die Ids der User zusammen mit einem zufällig ausgewählten Vornamen in der users.csv
     if (!usersExist) {
       const [maleResponse, femaleResponse] = await Promise.all([fetch(`https://www.randomlists.com/data/names-male.json`),
         fetch(`https://www.randomlists.com/data/names-female.json`)]);
@@ -110,6 +118,8 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
   return [Array.from(users.entries()).sort((a, b) => b[1] - a[1]).slice(0, 100).map(e => e[0]), Array.from(users.keys())];
 }
 
+// generiert die Dateien posts.csv und likes.csv jedes Mal neu, posts-graph.csv nur wenn noch nicht vorhanden, da sich an den Ids der Posts nichts ändert.
+// bei posts.csv werden die Posts bei jedem Durchlauf zufälligen Nutzern zugewiesen, in der likes.csv die Likes zufällig verteilt.
 const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: string[]): Promise<void> => {
   const postsExist = fs.existsSync(POSTS_PROCESSED_PATH);
   const likesExist = fs.existsSync(LIKES_PROCESSED_PATH);
@@ -132,13 +142,18 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
 
   try {
     const headers = ['author', 'content', 'country', 'date_time', 'id', 'language', 'latitude', 'longitude', 'number_of_likes', 'number_of_shares'];
+    // Einlesen der tweets.csv
     parse(fs.readFileSync(POSTS_PATH), { delimiter: ',', columns: headers, fromLine: 2 }, (err, results: Post[]) => {
       if (err) {
         console.error(err);
       }
       else {
         for (const post of results) {
+	  // jeder Post wird auf die nötigen Daten reduziert, bekommt einen der hundert Usern mit den meisten Followern zugewiesen
+	  // und date_time wird zu einer Cassandra-timeuuid konvertiert
           const date_time = cassandra.types.TimeUuid.fromDate(new Date(post.date_time));
+
+	  // die Datei posts-graph.csv besteht aus nur einer Spalte. Sie ist nur dafür da, die Posts in neo4j für die LIKES-Beziehung bereitzustellen
           if (!postsGraphExist) {
             fs.appendFileSync(POSTS_GRAPH_PROCESSED_PATH, `${date_time}\n`);
           }
@@ -146,6 +161,7 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
 
           const usedUsers: string[] = [];
 
+	  // jedem Post wird eine zufällige Anzahl Likes zugeteilt, die sich zwischen 1 un MAX_LIKES befindet. Dabei wird darauf geachtet, dass kein User den selben Post zweimal liket.
           while (usedUsers.length < randomInt(1, MAX_LIKES)) {
             const user = allUsers[randomInt(0, allUsers.length)];
 
@@ -163,20 +179,31 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
   }
 }
 
+// wird vom Endpunkt localhost/writeDataToDBs aufgerufen
 export const writeToDBs = async (): Promise<void> => {
   try {
+    // die Datei copy-data.sh wird ausgeführt, um die generierten Dateien in die entsprechenden Container zu kopieren. Obwohl mit der Ausführung der folgenden
+    // Queries gewartet werden sollte, bis die Datei vollständig ausgeführt wurde, kann es vorkommen, dass beim Ausführen der Queries die Dateien noch nicht verfügbar sind
+    // (warum auch immer...). Ein zweiter Aufruf des Endpunkts sollte das beheben, notfalls einfach den Inhalt der copy-data.sh in ein Terminal im Root-Pfad der Anwendung kopieren und ausführen.
     exec('copy-data.sh', async (error, _stdout, _stderr) => {
       if (error) {
         throw error;
       }
       console.log('***************** start writing to dbs *****************');
       
+      // Löschen aller Einträge in der neo4j-Datenbank
       await neo4jClient.run(`MATCH (n) DETACH DELETE n`);
       
       console.log('***************** cleared neo4j *****************');
+
+      // Erstellen der Constraints für die Primärschlüssel in der neo4j-Datenbank
+      await neo4jClient.run(`CREATE CONSTRAINT constraint_user IF NOT EXISTS ON (n:User) ASSERT n.id IS UNIQUE`);
+      await neo4jClient.run(`CREATE CONSTRAINT constraint_post IF NOT EXISTS ON (n:Post) ASSERT n.id IS UNIQUE`);
+      
+      console.log('***************** created constraints *****************');
   
+      // Schreiben der User-Nodes in die neo4j-Datenbank
       await neo4jClient.run(`
-      // load User nodes
       USING PERIODIC COMMIT 500
       LOAD CSV WITH HEADERS FROM 'file:///users.csv' AS row
       MERGE (u:User {id: row.id, name: row.name})
@@ -184,50 +211,50 @@ export const writeToDBs = async (): Promise<void> => {
 
       console.log('***************** wrote User *****************');
   
+      // Schreiben der Posts-Nodes in die neo4j-Datenbank
       await neo4jClient.run(`
-      // load posts
       USING PERIODIC COMMIT 500
       LOAD CSV WITH HEADERS FROM 'file:///posts-graph.csv' AS row
       MERGE (p:Post {id: row.id})
       RETURN count(p)`);
 
       console.log('***************** wrote Post *****************');
-
+      
+      // Erstellen der FOLLOWS-Beziehung zwischen Usern
       await neo4jClient.run(`
-      // create relationships
       USING PERIODIC COMMIT 500
       LOAD CSV WITH HEADERS FROM 'file:///follows.csv' AS row
-      MATCH (u:User {id: row.id})
+      MATCH (u:User {id: row.userid})
       MATCH (f:User {id: row.followid})
-      MERGE (u)-[:FOLLOWS]->(f)
-      RETURN * limit 10`);
+      MERGE (u)-[:FOLLOWS]->(f)`);
       
       console.log('***************** wrote FOLLOWS *****************');
   
+      // Erstellen der LIKES-Beziehung zwischen Usern und Posts
       await neo4jClient.run(`
-      // create relationships
       USING PERIODIC COMMIT 500
       LOAD CSV WITH HEADERS FROM 'file:///likes.csv' AS row
       MATCH (u:User {id: row.userid})
       MATCH (p:Post {id: row.postid})
-      MERGE (u)-[:LIKES]->(p)
-      RETURN * limit 10`);
+      MERGE (u)-[:LIKES]->(p)`);
       
       console.log('***************** wrote LIKES *****************');
   
+      // Erstellen der posts_by_user-Tabelle in Cassandra
       await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
         postid timeuuid,
         userid bigint,
         content text,
-        PRIMARY KEY (userid, postid)
+        PRIMARY KEY (userid, postid, content)
       ) WITH CLUSTERING ORDER BY (postid DESC);`);
       
+      // Schreiben der Posts in die posts_by_user-Tabelle in Cassandra
       await cassandraClient.execute(`COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;`);
       
       console.log('***************** wrote Posts cass *****************');
+      console.log('***************** finished writing data to DBs *****************');
     });
   } catch (error) {
     console.log(error);
   }
 }
-

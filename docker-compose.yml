@@ -56,9 +56,12 @@ services:
     environment:
       - NEO4J_AUTH=neo4j/neo4j12345
       - NEO4J_dbms_mode=CORE
-      - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=2
-      - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=2
-      - NEO4J_causal__clustering_initial__discovery__members=neo4j_1:5000,neo4j_2:5001
+      # - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=2
+      # - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=2
+      # - NEO4J_causal__clustering_initial__discovery__members=neo4j_1:5000,neo4j_2:5001
+      # - causal__clustering_discovery__listen__address=:5000
+      # - causal__clustering_transaction__listen__address=:6000
+      # - causal__clustering_raft__listen__address=:7000
       - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
       - NEO4J_dbms_connector_http_listen__address=:7474
       - NEO4J_dbms_connector_https_listen__address=:6477
@@ -87,6 +90,9 @@ services:
   #     - NEO4J_causal__clustering_minimum__core__cluster__size__at__formation=2
   #     - NEO4J_causal__clustering_minimum__core__cluster__size__at__runtime=2
   #     - NEO4J_causal__clustering_initial__discovery__members=neo4j_1:5000,neo4j_2:5001
+  #     - causal__clustering_discovery__listen__address=:5001
+  #     - causal__clustering_transaction__listen__address=:6001
+  #     - causal__clustering_raft__listen__address=:7001
   #     - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
   #     - NEO4J_dbms_connector_http_listen__address=:7475
   #     - NEO4J_dbms_connector_https_listen__address=:6478

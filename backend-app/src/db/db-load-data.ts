@@ -49,7 +49,7 @@ const neo4jClient = neo4j.driver(process.env.NEO4J_IP!, neo4j.auth.basic(
     process.env.NEO4J_USER!,
     process.env.NEO4J_PASS!)).session();
 
-// wird vom Endpunkt localhost/generateData aufgerufen
+// wird vom Endpunkt localhost/api/generateData aufgerufen
 export const generateData = async (): Promise<string> => {
   const [mostFollowedUsers, allUsers] = await generateFollowsAndUsers();
   await generatePostsAndLikes(mostFollowedUsers, allUsers);
@@ -161,8 +161,9 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
 
           const usedUsers: string[] = [];
 
-	  // jedem Post wird eine zufällige Anzahl Likes zugeteilt, die sich zwischen 1 un MAX_LIKES befindet. Dabei wird darauf geachtet, dass kein User den selben Post zweimal liket.
-          while (usedUsers.length < randomInt(1, MAX_LIKES)) {
+	  // jedem Post wird ein Hundertstel der Likes die er eigentlich hat zufällig zugewiesen. Dies geschieht, um die Dauer für das Generieren in einem erträglichen Maß zu halten.
+    // Dabei wird darauf geachtet, dass kein User den selben Post zweimal liket.
+          while (usedUsers.length < parseInt(post.number_of_likes) / 100) {
             const user = allUsers[randomInt(0, allUsers.length)];
 
             if (!usedUsers.includes(user)) {
@@ -179,7 +180,7 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
   }
 }
 
-// wird vom Endpunkt localhost/writeDataToDBs aufgerufen
+// wird vom Endpunkt localhost/api/writeDataToDBs aufgerufen
 export const writeToDBs = async (): Promise<void> => {
   try {
     // die Datei copy-data.sh wird ausgeführt, um die generierten Dateien in die entsprechenden Container zu kopieren. Obwohl mit der Ausführung der folgenden

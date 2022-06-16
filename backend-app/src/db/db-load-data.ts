@@ -88,7 +88,8 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
       }
   
       if (!followsExist) {
-        fs.appendFileSync(FOLLOWS_PROCESSED_PATH, `${user},${follow}\n`);
+        const line = `${user},${follow}`;
+        fs.appendFileSync(FOLLOWS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
       }
     }
 
@@ -104,7 +105,8 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
       console.log('***************** fetched name lists *****************');
     
       for (const user of users) {
-        fs.appendFileSync(USERS_PROCESSED_PATH, `${user[0]},${combinedList[randomInt(0, combinedList.length)]}\n`);
+        const line = `${user[0]},${combinedList[randomInt(0, combinedList.length)]}`;
+        fs.appendFileSync(USERS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
       }
   
       console.log('***************** finished users *****************');
@@ -153,19 +155,22 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
 
 	  // die Datei posts-graph.csv besteht aus nur einer Spalte. Sie ist nur dafür da, die Posts in neo4j für die LIKES-Beziehung bereitzustellen
           if (!postsGraphExist) {
-            fs.appendFileSync(POSTS_GRAPH_PROCESSED_PATH, `${date_time}\n`);
+            const line = `${date_time}`;
+            fs.appendFileSync(POSTS_GRAPH_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
           }
-          fs.appendFileSync(POSTS_PROCESSED_PATH, `${mostFollowedUsers[randomInt(0, mostFollowedUsers.length)]},${date_time},"${post.content.replaceAll('"', '""')}"\n`);
+          const line = `${mostFollowedUsers[randomInt(0, mostFollowedUsers.length)]},${date_time},"${post.content.replaceAll('"', '""')}"`;
+          fs.appendFileSync(POSTS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
 
           const usedUsers: string[] = [];
 
 	  // jedem Post wird ein Hundertstel der Likes die er eigentlich hat zufällig zugewiesen. Dies geschieht, um die Dauer für das Generieren in einem erträglichen Maß zu halten.
     // Dabei wird darauf geachtet, dass kein User den selben Post zweimal liket.
-          while (usedUsers.length < parseInt(post.number_of_likes) / 100) {
+          while (usedUsers.length < parseInt(post.number_of_likes) / 1000) {
             const user = allUsers[randomInt(0, allUsers.length)];
 
             if (!usedUsers.includes(user)) {
-              fs.appendFileSync(LIKES_PROCESSED_PATH, `${user},${date_time}\n`);
+              const line = `${user},${date_time}`;
+              fs.appendFileSync(LIKES_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
               usedUsers.push(user);
             }
           }

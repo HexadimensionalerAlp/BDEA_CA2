@@ -16,8 +16,6 @@ const POSTS_PROCESSED_PATH = 'data/test-data/posts.csv';
 const POSTS_GRAPH_PROCESSED_PATH = 'data/test-data/posts-graph.csv';
 const LIKES_PROCESSED_PATH = 'data/test-data/likes.csv';
 
-const MAX_LIKES = 100;
-
 dotenv.config();
 
 type Post = {
@@ -49,7 +47,7 @@ const neo4jClient = neo4j.driver(process.env.NEO4J_IP!, neo4j.auth.basic(
     process.env.NEO4J_USER!,
     process.env.NEO4J_PASS!)).session();
 
-// wird vom Endpunkt localhost/api/generateData aufgerufen
+// wird vom Endpunkt localhost/generateData aufgerufen
 export const generateData = async (): Promise<string> => {
   const [mostFollowedUsers, allUsers] = await generateFollowsAndUsers();
   await generatePostsAndLikes(mostFollowedUsers, allUsers);
@@ -180,7 +178,7 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
   }
 }
 
-// wird vom Endpunkt localhost/api/writeDataToDBs aufgerufen
+// wird vom Endpunkt localhost/writeDataToDBs aufgerufen
 export const writeToDBs = async (): Promise<void> => {
   try {
     // die Datei copy-data.sh wird ausgeführt, um die generierten Dateien in die entsprechenden Container zu kopieren. Obwohl mit der Ausführung der folgenden

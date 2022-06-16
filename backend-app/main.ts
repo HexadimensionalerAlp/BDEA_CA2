@@ -42,8 +42,7 @@ app.get('/generateData/', async (_req: Request, res: Response) => {
 });
 
 app.get('/writeDataToDBs/', async (_req: Request, res: Response) => {
-    await dbPopulate.writeToDBs();
-    res.send('probably done');
+    res.send(await dbPopulate.writeToDBs());
 });
 
 app.listen(port, () => {

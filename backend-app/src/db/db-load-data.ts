@@ -6,7 +6,7 @@ import fs from 'fs';
 import { randomInt } from 'crypto';
 import fetch from 'node-fetch';
 import { parse } from 'csv-parse';
-import { exec } from 'child_process';
+import { execSync } from 'child_process';
 
 const FOLLOWS_PATH = 'data/test-data/twitter_combined.txt'
 const FOLLOWS_PROCESSED_PATH = 'data/test-data/follows.csv';
@@ -179,81 +179,84 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
 }
 
 // wird vom Endpunkt localhost/writeDataToDBs aufgerufen
-export const writeToDBs = async (): Promise<void> => {
+export const writeToDBs = async (): Promise<string> => {
+  let result = 'successfully done';
   try {
-    // die Datei copy-data.sh wird ausgeführt, um die generierten Dateien in die entsprechenden Container zu kopieren. Obwohl mit der Ausführung der folgenden
-    // Queries gewartet werden sollte, bis die Datei vollständig ausgeführt wurde, kann es vorkommen, dass beim Ausführen der Queries die Dateien noch nicht verfügbar sind
-    // (warum auch immer...). Ein zweiter Aufruf des Endpunkts sollte das beheben, notfalls einfach den Inhalt der copy-data.sh in ein Terminal im Root-Pfad der Anwendung kopieren und ausführen.
-    exec('copy-data.sh', async (error, _stdout, _stderr) => {
-      if (error) {
-        throw error;
-      }
-      console.log('***************** start writing to dbs *****************');
-      
-      // Löschen aller Einträge in der neo4j-Datenbank
-      await neo4jClient.run(`MATCH (n) DETACH DELETE n`);
-      
-      console.log('***************** cleared neo4j *****************');
+    // kopiert die generierten CSV-Dateien in die jeweiligen Container
+    execSync(`docker cp data/test-data/posts.csv cass_1:posts.csv`);
+    execSync(`docker cp data/test-data/posts.csv cass_2:posts.csv`);
+    execSync(`docker cp data/test-data/follows.csv neo4j_1:follows.csv`);
+    execSync(`docker cp data/test-data/users.csv neo4j_1:users.csv`);
+    execSync(`docker cp data/test-data/posts-graph.csv neo4j_1:posts-graph.csv`);
+    execSync(`docker cp data/test-data/likes.csv neo4j_1:likes.csv`);
 
-      // Erstellen der Constraints für die Primärschlüssel in der neo4j-Datenbank
-      await neo4jClient.run(`CREATE CONSTRAINT constraint_user IF NOT EXISTS ON (n:User) ASSERT n.id IS UNIQUE`);
-      await neo4jClient.run(`CREATE CONSTRAINT constraint_post IF NOT EXISTS ON (n:Post) ASSERT n.id IS UNIQUE`);
+    console.log('***************** start writing to dbs *****************');
       
-      console.log('***************** created constraints *****************');
-  
-      // Schreiben der User-Nodes in die neo4j-Datenbank
-      await neo4jClient.run(`
-      USING PERIODIC COMMIT 500
-      LOAD CSV WITH HEADERS FROM 'file:///users.csv' AS row
-      MERGE (u:User {id: row.id, name: row.name})
-      RETURN count(u)`);
+    // Löschen aller Einträge in der neo4j-Datenbank
+    await neo4jClient.run(`MATCH (n) DETACH DELETE n`);
+    
+    console.log('***************** cleared neo4j *****************');
+    // Erstellen der Constraints für die Primärschlüssel in der neo4j-Datenbank
+    await neo4jClient.run(`CREATE CONSTRAINT constraint_user IF NOT EXISTS ON (n:User) ASSERT n.id IS UNIQUE`);
+    await neo4jClient.run(`CREATE CONSTRAINT constraint_post IF NOT EXISTS ON (n:Post) ASSERT n.id IS UNIQUE`);
+    
+    console.log('***************** created constraints *****************');
 
-      console.log('***************** wrote User *****************');
-  
-      // Schreiben der Posts-Nodes in die neo4j-Datenbank
-      await neo4jClient.run(`
-      USING PERIODIC COMMIT 500
-      LOAD CSV WITH HEADERS FROM 'file:///posts-graph.csv' AS row
-      MERGE (p:Post {id: row.id})
-      RETURN count(p)`);
+    // Schreiben der User-Nodes in die neo4j-Datenbank
+    await neo4jClient.run(`
+    USING PERIODIC COMMIT 500
+    LOAD CSV WITH HEADERS FROM 'file:///users.csv' AS row
+    MERGE (u:User {id: row.id, name: row.name})
+    RETURN count(u)`);
 
-      console.log('***************** wrote Post *****************');
-      
-      // Erstellen der FOLLOWS-Beziehung zwischen Usern
-      await neo4jClient.run(`
-      USING PERIODIC COMMIT 500
-      LOAD CSV WITH HEADERS FROM 'file:///follows.csv' AS row
-      MATCH (u:User {id: row.userid})
-      MATCH (f:User {id: row.followid})
-      MERGE (u)-[:FOLLOWS]->(f)`);
-      
-      console.log('***************** wrote FOLLOWS *****************');
-  
-      // Erstellen der LIKES-Beziehung zwischen Usern und Posts
-      await neo4jClient.run(`
-      USING PERIODIC COMMIT 500
-      LOAD CSV WITH HEADERS FROM 'file:///likes.csv' AS row
-      MATCH (u:User {id: row.userid})
-      MATCH (p:Post {id: row.postid})
-      MERGE (u)-[:LIKES]->(p)`);
-      
-      console.log('***************** wrote LIKES *****************');
-  
-      // Erstellen der posts_by_user-Tabelle in Cassandra
-      await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
-        postid timeuuid,
-        userid bigint,
-        content text,
-        PRIMARY KEY (userid, postid, content)
-      ) WITH CLUSTERING ORDER BY (postid DESC);`);
-      
-      // Schreiben der Posts in die posts_by_user-Tabelle in Cassandra
-      await cassandraClient.execute(`COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;`);
-      
-      console.log('***************** wrote Posts cass *****************');
-      console.log('***************** finished writing data to DBs *****************');
-    });
+    console.log('***************** wrote User *****************');
+
+    // Schreiben der Posts-Nodes in die neo4j-Datenbank
+    await neo4jClient.run(`
+    USING PERIODIC COMMIT 500
+    LOAD CSV WITH HEADERS FROM 'file:///posts-graph.csv' AS row
+    MERGE (p:Post {id: row.id})
+    RETURN count(p)`);
+
+    console.log('***************** wrote Post *****************');
+    
+    // Erstellen der FOLLOWS-Beziehung zwischen Usern
+    await neo4jClient.run(`
+    USING PERIODIC COMMIT 500
+    LOAD CSV WITH HEADERS FROM 'file:///follows.csv' AS row
+    MATCH (u:User {id: row.userid})
+    MATCH (f:User {id: row.followid})
+    MERGE (u)-[:FOLLOWS]->(f)`);
+    
+    console.log('***************** wrote FOLLOWS *****************');
+
+    // Erstellen der LIKES-Beziehung zwischen Usern und Posts
+    await neo4jClient.run(`
+    USING PERIODIC COMMIT 500
+    LOAD CSV WITH HEADERS FROM 'file:///likes.csv' AS row
+    MATCH (u:User {id: row.userid})
+    MATCH (p:Post {id: row.postid})
+    MERGE (u)-[:LIKES]->(p)`);
+    
+    console.log('***************** wrote LIKES *****************');
+
+    // Erstellen der posts_by_user-Tabelle in Cassandra
+    await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
+      postid timeuuid,
+      userid bigint,
+      content text,
+      PRIMARY KEY (userid, postid, content)
+    ) WITH CLUSTERING ORDER BY (postid DESC);`);
+    
+    // Schreiben der Posts in die posts_by_user-Tabelle in Cassandra
+    await cassandraClient.execute(`COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;`);
+    
+    console.log('***************** wrote Posts cass *****************');
+    console.log('***************** finished writing data to DBs *****************');
   } catch (error) {
+    result = '' + error;
     console.log(error);
   }
+
+  return result;
 }

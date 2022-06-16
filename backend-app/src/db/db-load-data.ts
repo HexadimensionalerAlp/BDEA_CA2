@@ -158,7 +158,7 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
             const line = `${date_time}`;
             fs.appendFileSync(POSTS_GRAPH_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
           }
-          const line = `${mostFollowedUsers[randomInt(0, mostFollowedUsers.length)]},${date_time},"${post.content.replaceAll('"', '""')}"`;
+          const line = `${mostFollowedUsers[randomInt(0, mostFollowedUsers.length)]},${date_time},"${post.content.replaceAll('"', '')}"`;
           fs.appendFileSync(POSTS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
 
           const usedUsers: string[] = [];
@@ -254,7 +254,8 @@ export const writeToDBs = async (): Promise<string> => {
     ) WITH CLUSTERING ORDER BY (postid DESC);`);
     
     // Schreiben der Posts in die posts_by_user-Tabelle in Cassandra
-    await cassandraClient.execute(`COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;`);
+    execSync(`docker exec cass_1 cqlsh -e "use tweeter; COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;"`);
+    
     
     console.log('***************** wrote Posts cass *****************');
     console.log('***************** finished writing data to DBs *****************');

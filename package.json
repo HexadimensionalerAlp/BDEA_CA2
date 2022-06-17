@@ -23,6 +23,7 @@
     "@types/node-fetch": "^2.6.1",
     "cassandra-driver": "^4.6.3",
     "concurrently": "^7.2.1",
+    "cors": "^2.8.5",
     "csv-parse": "^5.1.0",
     "dotenv": "^16.0.1",
     "express": "^4.18.1",
@@ -32,6 +33,7 @@
     "typescript": "^4.7.2"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.12",
     "@types/express": "latest",
     "@types/n-readlines": "^1.0.3",
     "@types/node": "latest",

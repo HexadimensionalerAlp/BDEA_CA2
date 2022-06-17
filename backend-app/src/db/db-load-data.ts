@@ -8,7 +8,7 @@ import fetch from 'node-fetch';
 import { parse } from 'csv-parse';
 import { execSync } from 'child_process';
 
-const FOLLOWS_PATH = 'data/test-data/twitter_combined.txt'
+const FOLLOWS_PATH = 'data/test-data/twitter_combined.txt';
 const FOLLOWS_PROCESSED_PATH = 'data/test-data/follows.csv';
 const USERS_PROCESSED_PATH = 'data/test-data/users.csv';
 const POSTS_PATH = 'data/test-data/tweets.csv';
@@ -32,27 +32,30 @@ type Post = {
 };
 
 const authProvider = new cassandra.auth.PlainTextAuthProvider(
-    process.env.CASSANDRA_USER!,
-    process.env.CASSANDRA_PASS!
+  process.env.CASSANDRA_USER!,
+  process.env.CASSANDRA_PASS!
 );
 
 const cassandraClient = new cassandra.Client({
-    contactPoints: process.env.CASSANDRA_IPS!.split(','),
-    localDataCenter: 'datacenter1',
-    authProvider,
-    keyspace: 'tweeter'
+  contactPoints: process.env.CASSANDRA_IPS!.split(','),
+  localDataCenter: 'datacenter1',
+  authProvider,
+  keyspace: 'tweeter',
 });
 
-const neo4jClient = neo4j.driver(process.env.NEO4J_IP!, neo4j.auth.basic(
-    process.env.NEO4J_USER!,
-    process.env.NEO4J_PASS!)).session();
+const neo4jClient = neo4j
+  .driver(
+    process.env.NEO4J_IP!,
+    neo4j.auth.basic(process.env.NEO4J_USER!, process.env.NEO4J_PASS!)
+  )
+  .session();
 
 // wird vom Endpunkt localhost/generateData aufgerufen
 export const generateData = async (): Promise<string> => {
   const [mostFollowedUsers, allUsers] = await generateFollowsAndUsers();
   await generatePostsAndLikes(mostFollowedUsers, allUsers);
   return 'done';
-}
+};
 
 // generiert die Dateien users.csv und follows.csv nur neu, wenn sie noch nicht vorhanden sind, da dies länger dauert
 // und jeder Durchgang den gleichen Inhalt generiert.
@@ -77,50 +80,72 @@ const generateFollowsAndUsers = async (): Promise<[string[], string[]]> => {
 
     // liest die follows.txt Zeile für Zeile, wandelt den Inhalt in eine CSV-Zeile um und schreibt diese in die follows.csv
     // schreibt alle User in eine Map und zählt ihre Follower
-    while (line = lines.next()) {
+    while ((line = lines.next())) {
       const [user, follow] = line.toString().split(' ');
       const followerCount = users.get(follow);
-  
+
       if (!!followerCount) {
         users.set(follow, followerCount + 1);
       } else {
         users.set(follow, 1);
       }
-  
+
       if (!followsExist) {
         const line = `${user},${follow}`;
-        fs.appendFileSync(FOLLOWS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
+        fs.appendFileSync(
+          FOLLOWS_PROCESSED_PATH,
+          `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`
+        );
       }
     }
 
     console.log('***************** finished follows *****************');
-    
+
     // holt eine Liste mit Vornamen aus dem Internet und speichert die Ids der User zusammen mit einem zufällig ausgewählten Vornamen in der users.csv
     if (!usersExist) {
-      const [maleResponse, femaleResponse] = await Promise.all([fetch(`https://www.randomlists.com/data/names-male.json`),
-        fetch(`https://www.randomlists.com/data/names-female.json`)]);
-      const [nameListMale, nameListFemale] = await Promise.all([maleResponse.json() as any, femaleResponse.json() as any]);
+      const [maleResponse, femaleResponse] = await Promise.all([
+        fetch(`https://www.randomlists.com/data/names-male.json`),
+        fetch(`https://www.randomlists.com/data/names-female.json`),
+      ]);
+      const [nameListMale, nameListFemale] = await Promise.all([
+        maleResponse.json() as any,
+        femaleResponse.json() as any,
+      ]);
       const combinedList = nameListMale.data.concat(nameListFemale.data);
-  
+
       console.log('***************** fetched name lists *****************');
-    
+
       for (const user of users) {
-        const line = `${user[0]},${combinedList[randomInt(0, combinedList.length)]}`;
-        fs.appendFileSync(USERS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
+        const line = `${user[0]},${
+          combinedList[randomInt(0, combinedList.length)]
+        }`;
+        fs.appendFileSync(
+          USERS_PROCESSED_PATH,
+          `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`
+        );
       }
-  
+
       console.log('***************** finished users *****************');
     }
   } catch (error) {
     console.log(error);
   }
 
-  return [Array.from(users.entries()).sort((a, b) => b[1] - a[1]).slice(0, 100).map(e => e[0]), Array.from(users.keys())];
-}
+  return [
+    Array.from(users.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 100)
+      .map((e) => e[0]),
+    Array.from(users.keys()),
+  ];
+};
 
 // generiert die Dateien posts.csv und likes.csv jedes Mal neu, posts-graph.csv nur wenn noch nicht vorhanden, da sich an den Ids der Posts nichts ändert.
 // bei posts.csv werden die Posts bei jedem Durchlauf zufälligen Nutzern zugewiesen, in der likes.csv die Likes zufällig verteilt.
-const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: string[]): Promise<void> => {
+const generatePostsAndLikes = async (
+  mostFollowedUsers: string[],
+  allUsers: string[]
+): Promise<void> => {
   const postsExist = fs.existsSync(POSTS_PROCESSED_PATH);
   const likesExist = fs.existsSync(LIKES_PROCESSED_PATH);
   const postsGraphExist = fs.existsSync(POSTS_GRAPH_PROCESSED_PATH);
@@ -132,7 +157,7 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
   if (likesExist) {
     fs.truncateSync(LIKES_PROCESSED_PATH, 0);
   }
-  
+
   fs.appendFileSync(POSTS_PROCESSED_PATH, 'userid,postid,content\n');
   fs.appendFileSync(LIKES_PROCESSED_PATH, 'userid,postid\n');
 
@@ -141,47 +166,76 @@ const generatePostsAndLikes = async (mostFollowedUsers: string[], allUsers: stri
   }
 
   try {
-    const headers = ['author', 'content', 'country', 'date_time', 'id', 'language', 'latitude', 'longitude', 'number_of_likes', 'number_of_shares'];
+    const headers = [
+      'author',
+      'content',
+      'country',
+      'date_time',
+      'id',
+      'language',
+      'latitude',
+      'longitude',
+      'number_of_likes',
+      'number_of_shares',
+    ];
     // Einlesen der tweets.csv
-    parse(fs.readFileSync(POSTS_PATH), { delimiter: ',', columns: headers, fromLine: 2 }, (err, results: Post[]) => {
-      if (err) {
-        console.error(err);
-      }
-      else {
-        for (const post of results) {
-	  // jeder Post wird auf die nötigen Daten reduziert, bekommt einen der hundert Usern mit den meisten Followern zugewiesen
-	  // und date_time wird zu einer Cassandra-timeuuid konvertiert
-          const date_time = cassandra.types.TimeUuid.fromDate(new Date(post.date_time));
+    parse(
+      fs.readFileSync(POSTS_PATH),
+      { delimiter: ',', columns: headers, fromLine: 2 },
+      (err, results: Post[]) => {
+        if (err) {
+          console.error(err);
+        } else {
+          for (const post of results) {
+            // jeder Post wird auf die nötigen Daten reduziert, bekommt einen der hundert Usern mit den meisten Followern zugewiesen
+            // und date_time wird zu einer Cassandra-timeuuid konvertiert
+            const date_time = cassandra.types.TimeUuid.fromDate(
+              new Date(post.date_time)
+            );
 
-	  // die Datei posts-graph.csv besteht aus nur einer Spalte. Sie ist nur dafür da, die Posts in neo4j für die LIKES-Beziehung bereitzustellen
-          if (!postsGraphExist) {
-            const line = `${date_time}`;
-            fs.appendFileSync(POSTS_GRAPH_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
-          }
-          const line = `${mostFollowedUsers[randomInt(0, mostFollowedUsers.length)]},${date_time},"${post.content.replaceAll('"', '')}"`;
-          fs.appendFileSync(POSTS_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
+            // die Datei posts-graph.csv besteht aus nur einer Spalte. Sie ist nur dafür da, die Posts in neo4j für die LIKES-Beziehung bereitzustellen
+            if (!postsGraphExist) {
+              const line = `${date_time}`;
+              fs.appendFileSync(
+                POSTS_GRAPH_PROCESSED_PATH,
+                `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`
+              );
+            }
+            const line = `${
+              mostFollowedUsers[randomInt(0, mostFollowedUsers.length)]
+            },${date_time},"${post.content.replaceAll('"', '')}"`;
+            fs.appendFileSync(
+              POSTS_PROCESSED_PATH,
+              `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`
+            );
 
-          const usedUsers: string[] = [];
+            const usedUsers: string[] = [];
 
-	  // jedem Post wird ein Hundertstel der Likes die er eigentlich hat zufällig zugewiesen. Dies geschieht, um die Dauer für das Generieren in einem erträglichen Maß zu halten.
-    // Dabei wird darauf geachtet, dass kein User den selben Post zweimal liket.
-          while (usedUsers.length < parseInt(post.number_of_likes) / 1000) {
-            const user = allUsers[randomInt(0, allUsers.length)];
+            // jedem Post wird ein Hundertstel der Likes die er eigentlich hat zufällig zugewiesen. Dies geschieht, um die Dauer für das Generieren in einem erträglichen Maß zu halten.
+            // Dabei wird darauf geachtet, dass kein User den selben Post zweimal liket.
+            while (usedUsers.length < parseInt(post.number_of_likes) / 1000) {
+              const user = allUsers[randomInt(0, allUsers.length)];
 
-            if (!usedUsers.includes(user)) {
-              const line = `${user},${date_time}`;
-              fs.appendFileSync(LIKES_PROCESSED_PATH, `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`);
-              usedUsers.push(user);
+              if (!usedUsers.includes(user)) {
+                const line = `${user},${date_time}`;
+                fs.appendFileSync(
+                  LIKES_PROCESSED_PATH,
+                  `${line.replaceAll('\n', '').replaceAll('\r', '')}\n`
+                );
+                usedUsers.push(user);
+              }
             }
           }
+          console.log(
+            '***************** finished posts and likes *****************'
+          );
         }
-        console.log('***************** finished posts and likes *****************');
       }
-    });
+    );
   } catch (error) {
     console.log(error);
   }
-}
+};
 
 // wird vom Endpunkt localhost/writeDataToDBs aufgerufen
 export const writeToDBs = async (): Promise<string> => {
@@ -192,19 +246,25 @@ export const writeToDBs = async (): Promise<string> => {
     execSync(`docker cp data/test-data/posts.csv cass_2:posts.csv`);
     execSync(`docker cp data/test-data/follows.csv neo4j_1:follows.csv`);
     execSync(`docker cp data/test-data/users.csv neo4j_1:users.csv`);
-    execSync(`docker cp data/test-data/posts-graph.csv neo4j_1:posts-graph.csv`);
+    execSync(
+      `docker cp data/test-data/posts-graph.csv neo4j_1:posts-graph.csv`
+    );
     execSync(`docker cp data/test-data/likes.csv neo4j_1:likes.csv`);
 
     console.log('***************** start writing to dbs *****************');
-      
+
     // Löschen aller Einträge in der neo4j-Datenbank
     await neo4jClient.run(`MATCH (n) DETACH DELETE n`);
-    
+
     console.log('***************** cleared neo4j *****************');
     // Erstellen der Constraints für die Primärschlüssel in der neo4j-Datenbank
-    await neo4jClient.run(`CREATE CONSTRAINT constraint_user IF NOT EXISTS ON (n:User) ASSERT n.id IS UNIQUE`);
-    await neo4jClient.run(`CREATE CONSTRAINT constraint_post IF NOT EXISTS ON (n:Post) ASSERT n.id IS UNIQUE`);
-    
+    await neo4jClient.run(
+      `CREATE CONSTRAINT constraint_user IF NOT EXISTS ON (n:User) ASSERT n.id IS UNIQUE`
+    );
+    await neo4jClient.run(
+      `CREATE CONSTRAINT constraint_post IF NOT EXISTS ON (n:Post) ASSERT n.id IS UNIQUE`
+    );
+
     console.log('***************** created constraints *****************');
 
     // Schreiben der User-Nodes in die neo4j-Datenbank
@@ -224,7 +284,7 @@ export const writeToDBs = async (): Promise<string> => {
     RETURN count(p)`);
 
     console.log('***************** wrote Post *****************');
-    
+
     // Erstellen der FOLLOWS-Beziehung zwischen Usern
     await neo4jClient.run(`
     USING PERIODIC COMMIT 500
@@ -232,7 +292,7 @@ export const writeToDBs = async (): Promise<string> => {
     MATCH (u:User {id: row.userid})
     MATCH (f:User {id: row.followid})
     MERGE (u)-[:FOLLOWS]->(f)`);
-    
+
     console.log('***************** wrote FOLLOWS *****************');
 
     // Erstellen der LIKES-Beziehung zwischen Usern und Posts
@@ -242,7 +302,7 @@ export const writeToDBs = async (): Promise<string> => {
     MATCH (u:User {id: row.userid})
     MATCH (p:Post {id: row.postid})
     MERGE (u)-[:LIKES]->(p)`);
-    
+
     console.log('***************** wrote LIKES *****************');
 
     // Erstellen der posts_by_user-Tabelle in Cassandra
@@ -252,17 +312,68 @@ export const writeToDBs = async (): Promise<string> => {
       content text,
       PRIMARY KEY (userid, postid, content)
     ) WITH CLUSTERING ORDER BY (postid DESC);`);
-    
+
     // Schreiben der Posts in die posts_by_user-Tabelle in Cassandra
-    execSync(`docker exec cass_1 cqlsh -e "use tweeter; COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;"`);
-    
-    
+    execSync(
+      `docker exec cass_1 cqlsh -e "use tweeter; COPY posts_by_user (userid, postid, content) FROM 'posts.csv' WITH HEADER = true;"`
+    );
+
     console.log('***************** wrote Posts cass *****************');
-    console.log('***************** finished writing data to DBs *****************');
+    console.log(
+      '***************** finished writing data to DBs *****************'
+    );
   } catch (error) {
     result = '' + error;
     console.log(error);
   }
 
   return result;
-}
+};
+
+export const getTimeline = async (userName: string) => {
+  const res = await neo4jClient.run(
+    `match (n:User) where n.name = '${userName}' return n;`
+  );
+
+  return res;
+};
+
+export const fanOut = async (/* tweet: Tweet */) => {
+  const dummyTweet = {
+    postId: 'anyId2',
+    msg: 'some tweet message 2',
+    authorId: 'LucaG599',
+  };
+
+  const allUsersResult = await neo4jClient.run(
+    `match (u:User)-[f:FOLLOWS]->(m:User) where m.name = '${dummyTweet.authorId}' return u, f, m;`
+  );
+  const nodes = allUsersResult.records;
+
+  const userIds: number[] = [];
+
+  nodes.forEach((node) => userIds.push(parseInt(node.get(0).identity)));
+
+  for (const userId of userIds) {
+    const userResult = await neo4jClient.run(
+      `match (u:User) where ID(u) = ${userId} return u;`
+    );
+    const timeline: string = userResult.records[0].get(0).properties.timeline;
+    if (!!timeline) {
+      const timelineJSON = JSON.parse(timeline);
+      timelineJSON.data.push(dummyTweet);
+      const newTimeline = JSON.stringify(timelineJSON);
+      await neo4jClient.run(
+        `match (u:User) where ID(u) = ${userId} set u.timeline = '${newTimeline}';`
+      );
+    } else {
+      const timeline: any = { data: [] };
+      timeline.data.push(dummyTweet);
+      await neo4jClient.run(
+        `match (u:User) where ID(u) = ${userId} set u.timeline = '${JSON.stringify(
+          timeline
+        )}';`
+      );
+    }
+  }
+};

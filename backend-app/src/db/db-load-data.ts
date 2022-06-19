@@ -253,6 +253,7 @@ export const writeToDBs = async (): Promise<string> => {
       `docker cp data/test-data/posts-graph.csv neo4j_1:posts-graph.csv`
     );
     execSync(`docker cp data/test-data/likes.csv neo4j_1:likes.csv`);
+    execSync(`docker cp data/test-data/posts.csv neo4j_1:posts.csv`);
 
     console.log('***************** start writing to dbs *****************');
 
@@ -307,6 +308,16 @@ export const writeToDBs = async (): Promise<string> => {
     MERGE (u)-[:LIKES]->(p)`);
 
     console.log('***************** wrote LIKES *****************');
+
+     // Erstellen der POSTS-Beziehung zwischen Usern und Posts
+     await neo4jClient.run(`
+     USING PERIODIC COMMIT 500
+     LOAD CSV WITH HEADERS FROM 'file:///posts.csv' AS row
+     MATCH (u:User {id: row.userid})
+     MATCH (p:Post {id: row.postid})
+     MERGE (u)-[:POSTS]->(p)`);
+ 
+     console.log('***************** wrote POSTS *****************');
 
     // Erstellen der posts_by_user-Tabelle in Cassandra
     await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
@@ -370,7 +381,7 @@ export const fanOut = async (tweet: any) => {
       const timeline: any = { data: [] };
       timeline.data.push(tweet);
       await neo4jClient.run(
-        `match (u:User) where u.id = '${userId}' set u.timeline = '${JSON.stringify(
+        `match (u:User) where u.id = ${userId} set u.timeline = '${JSON.stringify(
           timeline
         )}';`
       );
@@ -385,23 +396,21 @@ export const getPostsOfUser = async (user: string) => {
   );
   var result: string = '';
   for (const row of cass.rows) {
-    result += row.get(0) + '\n';
+    result += row.get(0) + "\n"; 
   }
   return result;
-};
+}
 
 //Abfrage 2
 export const getTop100mostFollowers = async () => {
-  const neo =
-    await neo4jClient.run(`match (u1:User)<-[:FOLLOWS]-(u2:User) return u1, 
-                                     count(u2) as followers order by followers desc limit 100`);
+  const neo = await neo4jClient.run(`match (u1:User)<-[:FOLLOWS]-(u2:User) return u1, 
+                                     count(u2) as followers order by followers desc limit 100`
+  );
   const map = new Map();
   //return neo.records[0];
-  neo.records.forEach((node) =>
-    map.set(node.get(0).properties, node.get(1).low)
-  );
+  neo.records.forEach((node) => map.set(node.get(0).properties, node.get(1).low));
   return [...map.entries()];
-};
+}
 
 //Abfrage 3
 export const getTop100TopFans = async () => {
@@ -417,21 +426,12 @@ export const getTop100TopFans = async () => {
 	  return u3, count(u1) as followingInTop100
 	  order by followingInTop100 desc limit 100`
   );
-  neo.records.forEach(function (element) {
-    arr.push(
-      'NAME:' +
-        element.get(0).properties.name +
-        ',' +
-        'ID:' +
-        element.get(0).properties.id +
-        ',' +
-        'FOLLOWING ' +
-        element.get(1) +
-        ' PEOPLE IN TOP 100'
-    );
+  neo.records.forEach(function(element) {
+    arr.push('NAME:'+element.get(0).properties.name+','+'ID:'+element.get(0).properties.id+','+
+    'FOLLOWING ' + element.get(1) + ' PEOPLE IN TOP 100');
   });
   return arr;
-};
+}
 
 //Abfrage 4  (1)
 export const getProfileOfUser = async (user: string) => {
@@ -439,157 +439,127 @@ export const getProfileOfUser = async (user: string) => {
   var arr = new Array(0);
   //Abfrage, 4.1
   const neo = await neo4jClient.run(
-    `match (u1:User {id: "${user}"})<-[:FOLLOWS]-(u2:User) return count(u2) as followers`
+    `match (u1:User {id: "${user}"})<-[:FOLLOWS]-(u2:User) return count(u2) as followers` 
   );
   arr.push('FOLLOWER COUNT:' + neo.records[0].get(0).low);
 
   //Abfrage, 4.2
   const neo2 = await neo4jClient.run(
     `match (u1:User {id: "${user}"})-[:FOLLOWS]->(u2:User) return count(u2) as following`
-  );
+  )  
   arr.push('FOLLOWING ' + neo2.records[0].get(0).low + ' people');
   arr.push('TOP POSTS OF FOLLOWED PEOPLE:');
-
+  
   //Abfrage 4.3
-  //Abfrage, 4.3.1
-  //Aus neo4j werden die top Posts der gefolgten Leute samt Likes ermittelt
-  const neo3 = await neo4jClient.run(
-    `match (u1:User {id: "${user}"})-[:FOLLOWS]->(u2:User) match (u2)-[:POSTS]->(p:Post)
+    //Abfrage, 4.3.1
+    //Aus neo4j werden die top Posts der gefolgten Leute samt Likes ermittelt
+    const neo3 = await neo4jClient.run(
+      `match (u1:User {id: "${user}"})-[:FOLLOWS]->(u2:User) match (u2)-[:POSTS]->(p:Post)
        match l=()-[:LIKES]->(p) return u2, p.id, count(l) as likes order by likes desc limit 25`
-  );
-
-  //Die ermittelten postids werden in ein Array mit ihrer Ordnung (in neo4j) gepackt
-  var arrCass = new Array(0);
-  for (const record of neo3.records) {
-    arrCass.push(record.get(1));
-  }
-
-  //Mit jeder der geordneten ids wird ein select ausgeführt, der Ergbenistweet dann in ein neues Array gepackt
-  var arrContent = new Array(0);
-  for (const element of arrCass) {
-    const content = await cassandraClient.execute(
-      'select content from posts_by_user where postid = ' +
-        element +
-        ' ALLOW FILTERING;'
     );
-    arrContent.push(content.rows[0].get(0));
-  }
+  
+    //Die ermittelten postids werden in ein Array mit ihrer Ordnung (in neo4j) gepackt
+    var arrCass = new Array(0);
+    for (const record of neo3.records) {
+      arrCass.push(record.get(1));
+    }  
 
-  //Für jedes aus neo4j enthaltene Element werden gewisse Daten genommen, mit dem Ergbenis aus Cassandra vereint und in ein weiteres Array gepusht
-  var i: number = 0;
-  neo3.records.forEach(function (element) {
-    arr.push(
-      'NAME:' +
-        element.get(0).properties.name +
-        ',' +
-        'ID:' +
-        element.get(0).properties.id +
-        ',' +
-        'POST:' +
-        arrContent[i] +
-        ',' +
-        'LIKES:' +
-        element.get(2).low
-    );
-    i++;
-  });
+    //Mit jeder der geordneten ids wird ein select ausgeführt, der Ergbenistweet dann in ein neues Array gepackt
+    var arrContent = new Array(0);
+    for (const element of arrCass) {
+      const content = await cassandraClient.execute('select content from posts_by_user where postid = ' + element +' ALLOW FILTERING;');
+      arrContent.push(content.rows[0].get(0));
+    }
+
+    //Für jedes aus neo4j enthaltene Element werden gewisse Daten genommen, mit dem Ergbenis aus Cassandra vereint und in ein weiteres Array gepusht
+    var i: number = 0;
+    neo3.records.forEach(function(element) {
+      arr.push('NAME:'+element.get(0).properties.name+','+'ID:'+element.get(0).properties.id+','+
+      'POST:'+arrContent[i]+','+'LIKES:'+element.get(2).low);
+      i++;
+    });
   //Das finale Array wird ausgegeben
-  return arr; //cass.rows;
-};
+  return arr;//cass.rows;
+}
 //Abfrage 4 (2)
 export const getProfileOfUser2 = async (user: string) => {
   //Ausgabearray
-  var arr = new Array(0);
+    var arr = new Array(0);
   //Abfrage, 4.1
   const neo = await neo4jClient.run(
-    `match (u1:User {id: "${user}"})<-[:FOLLOWS]-(u2:User) return count(u2) as followers`
+    `match (u1:User {id: "${user}"})<-[:FOLLOWS]-(u2:User) return count(u2) as followers` 
   );
   arr.push('FOLLOWER COUNT:' + neo.records[0].get(0).low);
 
   //Abfrage, 4.2
   const neo2 = await neo4jClient.run(
     `match (u1:User {id: "${user}"})-[:FOLLOWS]->(u2:User) return count(u2) as following`
-  );
+  )  
   arr.push('FOLLOWING ' + neo2.records[0].get(0).low + ' people');
   arr.push('NEWEST POSTS OF FOLLOWED PEOPLE:');
 
   //Abfrage 4.3
-  //Abfrage 4.3.2
-  //Aus neo4j werden die top Posts der gefolgten Leute mit Likes ermittelt, aber ohne Sortierung
-  const neo3 = await neo4jClient.run(
-    `match (u1:User {id: "${user}"})-[:FOLLOWS]->(u2:User) match (u2)-[:POSTS]->(p:Post)
+    //Abfrage 4.3.2
+    //Aus neo4j werden die top Posts der gefolgten Leute mit Likes ermittelt, aber ohne Sortierung
+    const neo3 = await neo4jClient.run(
+      `match (u1:User {id: "${user}"})-[:FOLLOWS]->(u2:User) match (u2)-[:POSTS]->(p:Post)
         match l=()-[:LIKES]->(p) return u2, p.id, count(l) as likes`
-  );
-  var arrCass = new Array(0);
-  for (const record of neo3.records) {
-    arrCass.push(record.get(1));
-  }
-
-  //Herstellung des Parameters der IN-Operation in Cassandra
-  var stringCass: string = '';
-  for (const element of arrCass) {
-    stringCass += element + ',';
-  }
-  stringCass = stringCass.slice(0, stringCass.length - 1);
-
-  //Cassandraabfrage zur Lieferung der contents geordnet nach Datum (Tuuid)
-  const cass = await cassandraClient.execute(
-    'select userid, postid, content from posts_by_user where postid in (' +
-      stringCass +
-      ') limit 25 ALLOW FILTERING;'
-  );
-
-  //Die ermittelten postids werden in ein Array mit ihrer Ordnung (in Cassandra) gepackt
-  var arrCassPostId = new Array(0);
-  for (const row of cass.rows) {
-    arrCassPostId.push(row.get(1));
-  }
-
-  var arrCassPostContent = new Array(0);
-  for (const row of cass.rows) {
-    arrCassPostContent.push(row.get(2));
-  }
-
-  var arrCassPostUser = new Array(0);
-  for (const row of cass.rows) {
-    arrCassPostUser.push(row.get(0));
-  }
-
-  //Einzelne matches in neo4j, da die Ordnung dieses Mal von Cassandra vorgegeben wird
-  var arrNeoUserName = new Array(0);
-  var arrNeoLikes = new Array(0);
-  for (const element of arrCassPostId) {
-    const content = await neo4jClient.run(
-      `match (p:Post {id: "` +
-        element +
-        `"}) match (u:User)-[:POSTS]->(p) match l=()-[:LIKES]->(p) return u, count(l)`
     );
-    arrNeoUserName.push(content.records[0].get(0).properties.name);
-    arrNeoLikes.push(content.records[0].get(1));
-  }
+    var arrCass = new Array(0);
+    for (const record of neo3.records) {
+      arrCass.push(record.get(1));
+    }
 
-  //Die geordneten Posts aus Cassandra werden mit den aus neo4j erhaltenen, geordneten Daten vereint im finalen array, das wird dann ausgegeben
-  var i: number = 0;
-  for (const row of cass.rows) {
-    arr.push(
-      'NAME: ' +
-        arrNeoUserName[i] +
-        'ID: ' +
-        arrCassPostUser[i] +
-        'POST: ' +
-        arrCassPostContent[i] +
-        'LIKES: ' +
-        arrNeoLikes[i]
-    );
-    //arr.push('NAME and ID:'+arrNeoUser[i]+', POST:'+arrCassPostContent[i]+', LIKES:'+arrNeoLikes[i]);
-    i++;
-  }
+    //Herstellung des Parameters der IN-Operation in Cassandra
+    var stringCass: string = '';
+    for (const element of arrCass) {
+      stringCass += element + ',';
+    }
+    stringCass = stringCass.slice(0, stringCass.length-1);
+
+    //Cassandraabfrage zur Lieferung der contents geordnet nach Datum (Tuuid)
+    const cass = await cassandraClient.execute('select userid, postid, content from posts_by_user where postid in (' + stringCass + ') limit 25 ALLOW FILTERING;')
+    
+    //Die ermittelten postids werden in ein Array mit ihrer Ordnung (in Cassandra) gepackt
+    var arrCassPostId = new Array(0);
+    for (const row of cass.rows) {
+      arrCassPostId.push(row.get(1));
+    }
+
+    var arrCassPostContent = new Array(0);
+    for (const row of cass.rows) {
+      arrCassPostContent.push(row.get(2));
+    }
+
+    var arrCassPostUser = new Array(0);
+    for (const row of cass.rows) {
+      arrCassPostUser.push(row.get(0));
+    }
+
+    //Einzelne matches in neo4j, da die Ordnung dieses Mal von Cassandra vorgegeben wird
+    var arrNeoUserName = new Array(0);
+    var arrNeoLikes = new Array(0);
+    for (const element of arrCassPostId) {
+      const content = await neo4jClient.run(`match (p:Post {id: "`+element+`"}) match (u:User)-[:POSTS]->(p) match l=()-[:LIKES]->(p) return u, count(l)`);
+      arrNeoUserName.push(content.records[0].get(0).properties.name);
+      arrNeoLikes.push(content.records[0].get(1));
+    }
+  
+    //Die geordneten Posts aus Cassandra werden mit den aus neo4j erhaltenen, geordneten Daten vereint im finalen array, das wird dann ausgegeben
+    var i: number = 0;
+    for(const row of cass.rows) {
+      arr.push('NAME: '+arrNeoUserName[i]+'ID: '+arrCassPostUser[i]+'POST: '+arrCassPostContent[i]+'LIKES: '+arrNeoLikes[i]);
+      //arr.push('NAME and ID:'+arrNeoUser[i]+', POST:'+arrCassPostContent[i]+', LIKES:'+arrNeoLikes[i]);
+      i++;
+    }
   return arr;
-};
+}
 
 //export const getTopPostsContainingWords = async (word: string) => {
 
 //}
+
+
 
 /*export const testNeo = async () => {
    const res =  await neo4jClient.run('match (u:User {id: "462559272"}) return u');

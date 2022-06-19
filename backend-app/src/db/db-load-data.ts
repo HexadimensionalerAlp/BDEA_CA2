@@ -250,6 +250,7 @@ export const writeToDBs = async (): Promise<string> => {
       `docker cp data/test-data/posts-graph.csv neo4j_1:posts-graph.csv`
     );
     execSync(`docker cp data/test-data/likes.csv neo4j_1:likes.csv`);
+    execSync(`docker cp data/test-data/posts.csv neo4j_1:posts.csv`);
 
     console.log('***************** start writing to dbs *****************');
 
@@ -285,16 +286,6 @@ export const writeToDBs = async (): Promise<string> => {
 
     console.log('***************** wrote Post *****************');
 
-    // Erstellen der FOLLOWS-Beziehung zwischen Usern
-    await neo4jClient.run(`
-    USING PERIODIC COMMIT 500
-    LOAD CSV WITH HEADERS FROM 'file:///follows.csv' AS row
-    MATCH (u:User {id: row.userid})
-    MATCH (f:User {id: row.followid})
-    MERGE (u)-[:FOLLOWS]->(f)`);
-
-    console.log('***************** wrote FOLLOWS *****************');
-
     // Erstellen der LIKES-Beziehung zwischen Usern und Posts
     await neo4jClient.run(`
     USING PERIODIC COMMIT 500
@@ -305,6 +296,26 @@ export const writeToDBs = async (): Promise<string> => {
 
     console.log('***************** wrote LIKES *****************');
 
+    // Erstellen der FOLLOWS-Beziehung zwischen Usern
+    await neo4jClient.run(`
+    USING PERIODIC COMMIT 500
+    LOAD CSV WITH HEADERS FROM 'file:///follows.csv' AS row
+    MATCH (u:User {id: row.userid})
+    MATCH (f:User {id: row.followid})
+    MERGE (u)-[:FOLLOWS]->(f)`);
+
+    console.log('***************** wrote FOLLOWS *****************');
+
+    // Erstellen der POSTS-Beziehung zwischen Usern und Posts
+    await neo4jClient.run(`
+    USING PERIODIC COMMIT 500
+    LOAD CSV WITH HEADERS FROM 'file:///posts.csv' AS row
+    MATCH (u:User {id: row.userid})
+    MATCH (p:Post {id: row.postid})
+    MERGE (u)-[:POSTS]->(p)`);
+
+    console.log('***************** wrote POSTS *****************');
+   
     // Erstellen der posts_by_user-Tabelle in Cassandra
     await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
       postid timeuuid,
@@ -377,3 +388,17 @@ export const fanOut = async (/* tweet: Tweet */) => {
     }
   }
 };
+
+export const top100mostFollowers = async () => {
+    const neo = await neo4jClient.run('match (u1:User)<-[:FOLLOWS]-(u2:User) return u1, count(u2) as followers order by followers desc limit 100')
+    const map = new Map();
+    //return neo.records[0];
+    neo.records.forEach((node) => map.set(node.get(0).properties.name, node.get(1).low));
+    return [...map.entries()];
+}
+
+/*export const testNeo = async () => {
+   const res =  await neo4jClient.run('match (u:User {id: "462559272"}) return u');
+   const node = res.records[0].get(0).properties;
+   return node;
+};*/

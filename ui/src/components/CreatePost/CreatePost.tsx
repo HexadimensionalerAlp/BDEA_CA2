@@ -15,8 +15,6 @@ const CreatePost = () => {
     axios.post(`http://localhost:80/createPost`, { message, authorId });
   };
 
-  // 27025598 schreibt fanout in: 23666930, 87233826, 15737386, 168790039, 168790039
-
   return (
     <>
       <NavBar />

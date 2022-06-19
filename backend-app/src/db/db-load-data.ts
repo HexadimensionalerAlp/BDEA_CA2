@@ -1,3 +1,6 @@
+// Die nachfolgende Datei wird über den Endpunkt localhost/generateData bzw. localhost/writeDataToDBs aufgerufen. Sie ist Teil der NodeJs-Anwendung und dient zum 
+// Vorverarbeiten und Generieren von Daten, sowie dem Schreiben der Daten in die Datenbanken.
+
 import dotenv from 'dotenv';
 import cassandra from 'cassandra-driver';
 import neo4j from 'neo4j-driver';
@@ -250,7 +253,6 @@ export const writeToDBs = async (): Promise<string> => {
       `docker cp data/test-data/posts-graph.csv neo4j_1:posts-graph.csv`
     );
     execSync(`docker cp data/test-data/likes.csv neo4j_1:likes.csv`);
-    execSync(`docker cp data/test-data/posts.csv neo4j_1:posts.csv`);
 
     console.log('***************** start writing to dbs *****************');
 
@@ -286,16 +288,6 @@ export const writeToDBs = async (): Promise<string> => {
 
     console.log('***************** wrote Post *****************');
 
-    // Erstellen der LIKES-Beziehung zwischen Usern und Posts
-    await neo4jClient.run(`
-    USING PERIODIC COMMIT 500
-    LOAD CSV WITH HEADERS FROM 'file:///likes.csv' AS row
-    MATCH (u:User {id: row.userid})
-    MATCH (p:Post {id: row.postid})
-    MERGE (u)-[:LIKES]->(p)`);
-
-    console.log('***************** wrote LIKES *****************');
-
     // Erstellen der FOLLOWS-Beziehung zwischen Usern
     await neo4jClient.run(`
     USING PERIODIC COMMIT 500
@@ -306,15 +298,15 @@ export const writeToDBs = async (): Promise<string> => {
 
     console.log('***************** wrote FOLLOWS *****************');
 
-    // Erstellen der POSTS-Beziehung zwischen Usern und Posts
+    // Erstellen der LIKES-Beziehung zwischen Usern und Posts
     await neo4jClient.run(`
     USING PERIODIC COMMIT 500
-    LOAD CSV WITH HEADERS FROM 'file:///posts.csv' AS row
+    LOAD CSV WITH HEADERS FROM 'file:///likes.csv' AS row
     MATCH (u:User {id: row.userid})
     MATCH (p:Post {id: row.postid})
-    MERGE (u)-[:POSTS]->(p)`);
+    MERGE (u)-[:LIKES]->(p)`);
 
-    console.log('***************** wrote POSTS *****************');
+    console.log('***************** wrote LIKES *****************');
 
     // Erstellen der posts_by_user-Tabelle in Cassandra
     await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
@@ -341,49 +333,45 @@ export const writeToDBs = async (): Promise<string> => {
   return result;
 };
 
-export const getTimeline = async (authorId: string) => {
+export const getTimeline = async (userName: string) => {
   const res = await neo4jClient.run(
-    `match (n:User) where n.id = '${authorId}' return n;`
+    `match (n:User) where n.name = '${userName}' return n;`
   );
 
   return res;
 };
 
-export const fanOut = async (tweet: any) => {
-  console.log('tweet', tweet);
-  /* const dummyTweet = {
+export const fanOut = async (/* tweet: Tweet */) => {
+  const dummyTweet = {
     postId: 'anyId2',
     msg: 'some tweet message 2',
     authorId: 'LucaG599',
-  }; */
+  };
 
   const allUsersResult = await neo4jClient.run(
-    `match (u:User)-[f:FOLLOWS]->(m:User) where m.id = '${tweet.authorId}' return u, f, m;`
+    `match (u:User)-[f:FOLLOWS]->(m:User) where m.name = '${dummyTweet.authorId}' return u, f, m;`
   );
   const nodes = allUsersResult.records;
 
   const userIds: number[] = [];
 
-  nodes.forEach((node) => userIds.push(parseInt(node.get(0).properties.id)));
-
-  console.log('userIds', userIds);
+  nodes.forEach((node) => userIds.push(parseInt(node.get(0).identity)));
 
   for (const userId of userIds) {
     const userResult = await neo4jClient.run(
-      `match (u:User) where u.id = '${userId}' return u;`
+      `match (u:User) where ID(u) = ${userId} return u;`
     );
-
     const timeline: string = userResult.records[0].get(0).properties.timeline;
     if (!!timeline) {
       const timelineJSON = JSON.parse(timeline);
-      timelineJSON.data.push(tweet);
+      timelineJSON.data.push(dummyTweet);
       const newTimeline = JSON.stringify(timelineJSON);
       await neo4jClient.run(
-        `match (u:User) where u.id = '${userId}' set u.timeline = '${newTimeline}';`
+        `match (u:User) where ID(u) = ${userId} set u.timeline = '${newTimeline}';`
       );
     } else {
       const timeline: any = { data: [] };
-      timeline.data.push(tweet);
+      timeline.data.push(dummyTweet);
       await neo4jClient.run(
         `match (u:User) where ID(u) = ${userId} set u.timeline = '${JSON.stringify(
           timeline
@@ -392,21 +380,3 @@ export const fanOut = async (tweet: any) => {
     }
   }
 };
-
-export const top100mostFollowers = async () => {
-  const neo = await neo4jClient.run(
-    'match (u1:User)<-[:FOLLOWS]-(u2:User) return u1, count(u2) as followers order by followers desc limit 100'
-  );
-  const map = new Map();
-  //return neo.records[0];
-  neo.records.forEach((node) =>
-    map.set(node.get(0).properties.name, node.get(1).low)
-  );
-  return [...map.entries()];
-};
-
-/*export const testNeo = async () => {
-   const res =  await neo4jClient.run('match (u:User {id: "462559272"}) return u');
-   const node = res.records[0].get(0).properties;
-   return node;
-};*/

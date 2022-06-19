@@ -24,17 +24,13 @@ app.get('/', (_req: Request, res: Response) => {
 app.get('/profile/:user', async (req: Request, res: Response) => {
   const user: string = req.params.user;
   console.log(user);
-  res.send(
-    await dbPopulate.getProfileOfUser(user)
-  );
+  res.send(await dbPopulate.getProfileOfUser(user));
 });
 
 app.get('/profile2/:user', async (req: Request, res: Response) => {
   const user: string = req.params.user;
   console.log(user);
-  res.send(
-    await dbPopulate.getProfileOfUser2(user)
-  );
+  res.send(await dbPopulate.getProfileOfUser2(user));
 });
 
 app.get('/getPostsOfUser/:user', async (req: Request, res: Response) => {
@@ -47,8 +43,7 @@ app.get('/top100mostFollowers/', async (req: Request, res: Response) => {
 });
 
 app.get('/top100topFans/', async (req: Request, res: Response) => {
-  res.send(
-    await dbPopulate.getTop100TopFans());
+  res.send(await dbPopulate.getTop100TopFans());
 });
 
 app.post('/top25PostsContainingWords/', async (req: Request, res: Response) => {
@@ -71,11 +66,8 @@ app.get('/writeDataToDBs/', async (_req: Request, res: Response) => {
 }); */
 
 app.get('/timeline', async (req: Request, res) => {
-  console.log(req.query.authorId);
   const query = await dbPopulate.getTimeline(req.query.authorId as string);
-  console.log('query', query);
   const result = query.records[0].get(0).properties.timeline;
-  console.log(result);
   res.status(200).send(result);
 });
 

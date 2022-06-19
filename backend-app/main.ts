@@ -23,24 +23,32 @@ app.get('/', (_req: Request, res: Response) => {
 
 app.get('/profile/:user', async (req: Request, res: Response) => {
   const user: string = req.params.user;
+  console.log(user);
   res.send(
-    `TBD: show landing page of user ${user}, containing follower count, followed count and newest or most upvoted posts`
+    await dbPopulate.getProfileOfUser(user)
+  );
+});
+
+app.get('/profile2/:user', async (req: Request, res: Response) => {
+  const user: string = req.params.user;
+  console.log(user);
+  res.send(
+    await dbPopulate.getProfileOfUser2(user)
   );
 });
 
 app.get('/getPostsOfUser/:user', async (req: Request, res: Response) => {
   const user: string = req.params.user;
-  res.send(`TBD: should list all posts of user ${user}`);
+  res.send(await dbPopulate.getPostsOfUser(user));
 });
 
 app.get('/top100mostFollowers/', async (req: Request, res: Response) => {
-  res.send(`TBD: should list top 100 most followed accounts`);
+  res.send(await dbPopulate.getTop100mostFollowers());
 });
 
 app.get('/top100topFans/', async (req: Request, res: Response) => {
   res.send(
-    `TBD: should list top 100 users who follow the most of the top 100 followed accounts`
-  );
+    await dbPopulate.getTop100TopFans());
 });
 
 app.post('/top25PostsContainingWords/', async (req: Request, res: Response) => {

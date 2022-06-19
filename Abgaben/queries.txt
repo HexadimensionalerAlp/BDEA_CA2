@@ -1,0 +1,4 @@
+
+5. Fanout
+timeline aktualisieren: match (u:User) where u.id = '${userId}' set u.timeline = '${newTimeline}';
+timeline abfragen: match (n:User) where n.id = '${authorId}' return n;

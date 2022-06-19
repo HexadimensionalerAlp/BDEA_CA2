@@ -370,7 +370,7 @@ export const fanOut = async (tweet: any) => {
       const timeline: any = { data: [] };
       timeline.data.push(tweet);
       await neo4jClient.run(
-        `match (u:User) where ID(u) = ${userId} set u.timeline = '${JSON.stringify(
+        `match (u:User) where u.id = '${userId}' set u.timeline = '${JSON.stringify(
           timeline
         )}';`
       );

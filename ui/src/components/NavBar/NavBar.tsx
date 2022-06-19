@@ -12,6 +12,9 @@ const NavBar = () => {
       <Link className={classes.item} to="/timeline">
         Timeline
       </Link>
+      <Link className={classes.item} to="/createPost">
+        Create Post
+      </Link>
     </div>
   );
 };

@@ -5,6 +5,7 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Timeline } from './components/Timeline';
+import { CreatePost } from './components/CreatePost/CreatePost';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -14,7 +15,8 @@ root.render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
-        <Route path="Timeline" element={<Timeline />} />
+        <Route path="timeline" element={<Timeline />} />
+        <Route path="/createPost" element={<CreatePost />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

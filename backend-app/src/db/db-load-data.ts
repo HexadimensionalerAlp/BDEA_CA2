@@ -315,7 +315,7 @@ export const writeToDBs = async (): Promise<string> => {
     MERGE (u)-[:POSTS]->(p)`);
 
     console.log('***************** wrote POSTS *****************');
-   
+
     // Erstellen der posts_by_user-Tabelle in Cassandra
     await cassandraClient.execute(`CREATE TABLE IF NOT EXISTS posts_by_user(
       postid timeuuid,
@@ -341,45 +341,49 @@ export const writeToDBs = async (): Promise<string> => {
   return result;
 };
 
-export const getTimeline = async (userName: string) => {
+export const getTimeline = async (authorId: string) => {
   const res = await neo4jClient.run(
-    `match (n:User) where n.name = '${userName}' return n;`
+    `match (n:User) where n.id = '${authorId}' return n;`
   );
 
   return res;
 };
 
-export const fanOut = async (/* tweet: Tweet */) => {
-  const dummyTweet = {
+export const fanOut = async (tweet: any) => {
+  console.log('tweet', tweet);
+  /* const dummyTweet = {
     postId: 'anyId2',
     msg: 'some tweet message 2',
     authorId: 'LucaG599',
-  };
+  }; */
 
   const allUsersResult = await neo4jClient.run(
-    `match (u:User)-[f:FOLLOWS]->(m:User) where m.name = '${dummyTweet.authorId}' return u, f, m;`
+    `match (u:User)-[f:FOLLOWS]->(m:User) where m.id = '${tweet.authorId}' return u, f, m;`
   );
   const nodes = allUsersResult.records;
 
   const userIds: number[] = [];
 
-  nodes.forEach((node) => userIds.push(parseInt(node.get(0).identity)));
+  nodes.forEach((node) => userIds.push(parseInt(node.get(0).properties.id)));
+
+  console.log('userIds', userIds);
 
   for (const userId of userIds) {
     const userResult = await neo4jClient.run(
-      `match (u:User) where ID(u) = ${userId} return u;`
+      `match (u:User) where u.id = '${userId}' return u;`
     );
+
     const timeline: string = userResult.records[0].get(0).properties.timeline;
     if (!!timeline) {
       const timelineJSON = JSON.parse(timeline);
-      timelineJSON.data.push(dummyTweet);
+      timelineJSON.data.push(tweet);
       const newTimeline = JSON.stringify(timelineJSON);
       await neo4jClient.run(
-        `match (u:User) where ID(u) = ${userId} set u.timeline = '${newTimeline}';`
+        `match (u:User) where u.id = '${userId}' set u.timeline = '${newTimeline}';`
       );
     } else {
       const timeline: any = { data: [] };
-      timeline.data.push(dummyTweet);
+      timeline.data.push(tweet);
       await neo4jClient.run(
         `match (u:User) where ID(u) = ${userId} set u.timeline = '${JSON.stringify(
           timeline
@@ -390,12 +394,16 @@ export const fanOut = async (/* tweet: Tweet */) => {
 };
 
 export const top100mostFollowers = async () => {
-    const neo = await neo4jClient.run('match (u1:User)<-[:FOLLOWS]-(u2:User) return u1, count(u2) as followers order by followers desc limit 100')
-    const map = new Map();
-    //return neo.records[0];
-    neo.records.forEach((node) => map.set(node.get(0).properties.name, node.get(1).low));
-    return [...map.entries()];
-}
+  const neo = await neo4jClient.run(
+    'match (u1:User)<-[:FOLLOWS]-(u2:User) return u1, count(u2) as followers order by followers desc limit 100'
+  );
+  const map = new Map();
+  //return neo.records[0];
+  neo.records.forEach((node) =>
+    map.set(node.get(0).properties.name, node.get(1).low)
+  );
+  return [...map.entries()];
+};
 
 /*export const testNeo = async () => {
    const res =  await neo4jClient.run('match (u:User {id: "462559272"}) return u');

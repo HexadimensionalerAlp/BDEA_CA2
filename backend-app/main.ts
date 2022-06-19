@@ -64,20 +64,27 @@ app.get('/writeDataToDBs/', async (_req: Request, res: Response) => {
   res.send(await dbPopulate.writeToDBs());
 });
 
-app.get('/testFanout', async (req: Request, res: Response) => {
+/* app.get('/testFanout', async (req: Request, res: Response) => {
   await dbPopulate.fanOut();
 
   res.send('Nothing to show here');
-});
+}); */
 
 app.get('/timeline', async (req: Request, res) => {
-  console.log('called');
-  console.log(req.query.username);
-  const query = await dbPopulate.getTimeline(req.query.username as string);
+  console.log(req.query.authorId);
+  const query = await dbPopulate.getTimeline(req.query.authorId as string);
   console.log('query', query);
   const result = query.records[0].get(0).properties.timeline;
   console.log(result);
   res.status(200).send(result);
+});
+
+app.post('/createPost', async (req: Request, res: Response) => {
+  console.log('createPost called', req.body);
+
+  await dbPopulate.fanOut(req.body);
+
+  res.send();
 });
 
 app.listen(port, () => {

@@ -7,38 +7,38 @@ const Timeline = () => {
   const [timeline, setTimeline] = useState<any[]>();
   const [searchParams] = useSearchParams();
 
-  const [formUsername, setFormUsername] = useState('');
-  const [username, setUsername] = useState(searchParams.get('username'));
+  const [formAuthorId, setFormAuthorId] = useState('');
+  const [authorId, setauthorId] = useState(searchParams.get('authorId'));
 
   useEffect(() => {
-    if (!username) return;
+    if (!authorId) return;
     axios
-      .get(`http://localhost:80/timeline?username=${username}`)
+      .get(`http://localhost:80/timeline?authorId=${authorId}`)
       .then((res) => {
         setTimeline(res.data.data);
       })
       .catch((e) => console.log(e));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [username]);
+  }, [authorId]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setUsername(formUsername);
+    setauthorId(formAuthorId);
   };
 
   console.log('timeline', timeline);
 
-  if (!(username && timeline)) {
+  if (!(authorId && timeline)) {
     return (
       <>
         <NavBar />
         <form onSubmit={handleSubmit}>
-          <label htmlFor="username">Username: </label>
+          <label htmlFor="authorId">authorId: </label>
           <input
-            id="username"
-            value={formUsername}
-            onChange={(e) => setFormUsername(e.target.value)}
-            placeholder="Please enter a user name"
+            id="authorId"
+            value={formAuthorId}
+            onChange={(e) => setFormAuthorId(e.target.value)}
+            placeholder="Please enter a author id"
           />
           <br />
           <button type="submit">Enter</button>
@@ -55,7 +55,8 @@ const Timeline = () => {
         timeline.map((tweet) => {
           return (
             <>
-              {tweet.msg} <br />
+              <div>{tweet.message}</div>
+              <br />
             </>
           );
         })}
